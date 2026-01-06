@@ -1,13 +1,22 @@
-name: Build iStoreOS ipk
+name: Build multi-arch ipk
 
 on:
   push:
     tags:
-      - "v*.*.*"        # 只有打 tag 才触发，避免每次 push 都编译
-  workflow_dispatch:     # 手动触发按钮
+      - "v*.*.*"
+  workflow_dispatch:
 
 jobs:
   build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64_cortex-a53
+            sdk_url: https://downloads.istoreos.com/releases/22.03.3/targets/rockchip/armv8/istoreos-sdk-22.03.3-rockchip-armv8.tar.xz
+          - arch: x86_64
+            sdk_url: https://downloads.istoreos.com/releases/22.03.3/targets/x86/64/istoreos-sdk-22.03.3-x86-64.tar.xz
+
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -16,14 +25,20 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential ccache ecj fastjar file g++ gawk \
-            gettext git java-propose-classpath libelf-dev libncurses5-dev \
-            libncursesw5-dev libssl-dev python3 python3-distutils \
-            python3-setuptools python3-dev rsync subversion swig time xsltproc zlib1g-dev
+          sudo apt-get install -y \
+            build-essential ccache ecj fastjar file g++ gawk \
+            gettext git libelf-dev libncurses5-dev libncursesw5-dev \
+            libssl-dev python3 python3-pip python3-venv python3-setuptools \
+            python3-dev rsync subversion swig time xsltproc zlib1g-dev wget
 
-      - name: Clone iStoreOS SDK
+      - name: Download & extract SDK
         run: |
-          git clone --depth 1 https://github.com/istoreos/istoreos-sdk.git -b 22.03 sdk
+          wget -q ${{ matrix.sdk_url }} -O sdk.tar.xz
+          tar -xf sdk.tar.xz
+          mv istoreos-sdk* sdk
+
+      - name: Update feeds
+        run: |
           cd sdk
           ./scripts/feeds update -a
           ./scripts/feeds install -a
@@ -32,27 +47,30 @@ jobs:
         run: |
           cp -r "$GITHUB_WORKSPACE" sdk/package/utils/istore-captive
 
-      - name: Configure & Compile
+      - name: Configure
         run: |
           cd sdk
           make defconfig
           echo "CONFIG_PACKAGE_istore-captive=m" >> .config
           make defconfig
+
+      - name: Compile
+        run: |
+          cd sdk
           make package/utils/istore-captive/compile V=s -j$(nproc)
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ipk-file
-          path: sdk/bin/packages/*/base/istore-captive*.ipk
+      - name: Rename with arch
+        run: |
+          cd sdk/bin/packages/*/base
+          mv istore-captive*.ipk istore-captive-${GITHUB_REF_NAME#v}-${{ matrix.arch }}.ipk
 
       - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: sdk/bin/packages/*/base/istore-captive*.ipk
+          files: sdk/bin/packages/*/base/*.ipk
           token: ${{ secrets.GITHUB_TOKEN }}
           name: 兑换码上网插件 ${{ github.ref_name }}
           body: |
-            直接下载 `.ipk` 文件，然后在 iStoreOS 后台
+            根据架构下载对应 `.ipk` 文件，然后在 iStoreOS
             **文件管理 → 上传 → 安装** 即可。
