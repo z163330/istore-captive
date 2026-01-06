@@ -1,0 +1,26 @@
+#!/bin/sh
+uci -q get network.guest >/dev/null || {
+  uci set network.guest=interface
+  uci set network.guest.proto=static
+  uci set network.guest.ipaddr=192.168.99.1
+  uci set network.guest.netmask=255.255.255.0
+  uci commit network
+}
+uci -q get dhcp.guest >/dev/null || {
+  uci add dhcp dhcp
+  uci set dhcp.@dhcp[-1].interface=guest
+  uci set dhcp.@dhcp[-1].start=100
+  uci set dhcp.@dhcp[-1].limit=150
+  uci set dhcp.@dhcp[-1].leasetime=2h
+  uci commit dhcp
+}
+grep -q "address=/#/192.168.99.1" /etc/dnsmasq.conf || \
+  echo "address=/#/192.168.99.1" >> /etc/dnsmasq.conf
+uci set firewall.@defaults[0].auto_include='1'
+uci commit firewall
+mkdir -p /etc/captive
+[ -f /etc/captive/codes.json ] || echo '{}' >/etc/captive/codes.json
+/etc/init.d/cp_daemon enable
+/etc/init.d/cp_daemon start
+/etc/init.d/dnsmasq restart
+exit 0

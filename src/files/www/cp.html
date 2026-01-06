@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>上网兑换</title>
+<script src="https://cdn.jsdelivr.net/npm/qr-creator/dist/qr-creator.min.js"></script>
+<style>body{font-family:Arial;background:#f2f2f2;text-align:center;padding-top:10%}</style>
+</head>
+<body>
+<h2>请输入 8 位兑换码</h2>
+<input id="code" maxlength="8" style="font-size:24px;width:160px;text-transform:uppercase">
+<button onclick="redeem()">立即上网</button>
+<div id="msg" style="color:red;margin-top:10px"></div>
+<script>
+function redeem(){
+  const c = document.getElementById('code').value.toUpperCase();
+  fetch('/cgi-bin/cp_redeem.lua?code='+c)
+    .then(r=>r.json())
+    .then(j=>{
+      if(j.ok){ location.href='/cp_success.html?left='+j.left; }
+      else{ document.getElementById('msg').innerText=j.msg; }
+    });
+}
+if(/Android|iPhone/.test(navigator.userAgent)){
+  const div=document.createElement('div');document.body.appendChild(div);
+  QRCreator(location.href, {radius:.5, ecLevel: 'H', size:128}, div);
+}
+</script>
+</body>
+</html>

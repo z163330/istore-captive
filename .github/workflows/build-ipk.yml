@@ -1,0 +1,58 @@
+name: Build iStoreOS ipk
+
+on:
+  push:
+    tags:
+      - "v*.*.*"        # 只有打 tag 才触发，避免每次 push 都编译
+  workflow_dispatch:     # 手动触发按钮
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ccache ecj fastjar file g++ gawk \
+            gettext git java-propose-classpath libelf-dev libncurses5-dev \
+            libncursesw5-dev libssl-dev python3 python3-distutils \
+            python3-setuptools python3-dev rsync subversion swig time xsltproc zlib1g-dev
+
+      - name: Clone iStoreOS SDK
+        run: |
+          git clone --depth 1 https://github.com/istoreos/istoreos-sdk.git -b 22.03 sdk
+          cd sdk
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Copy package source
+        run: |
+          cp -r "$GITHUB_WORKSPACE" sdk/package/utils/istore-captive
+
+      - name: Configure & Compile
+        run: |
+          cd sdk
+          make defconfig
+          echo "CONFIG_PACKAGE_istore-captive=m" >> .config
+          make defconfig
+          make package/utils/istore-captive/compile V=s -j$(nproc)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipk-file
+          path: sdk/bin/packages/*/base/istore-captive*.ipk
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: sdk/bin/packages/*/base/istore-captive*.ipk
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: 兑换码上网插件 ${{ github.ref_name }}
+          body: |
+            直接下载 `.ipk` 文件，然后在 iStoreOS 后台
+            **文件管理 → 上传 → 安装** 即可。
