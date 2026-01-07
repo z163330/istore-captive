@@ -55,9 +55,9 @@ jobs:
           make defconfig
           echo "CONFIG_PACKAGE_istore-captive=m" >> .config
           make defconfig
-          # 重点：V=sc 把我们自己包的日志也打印
-          make package/utils/istore-captive/clean V=sc
-          make package/utils/istore-captive/compile -j1 V=sc
+          # 强制打印我们自己包的每一步
+          make package/utils/istore-captive/clean V=s 2>&1
+          make package/utils/istore-captive/compile V=s 2>&1
 
       - name: 收集产物
         run: |
