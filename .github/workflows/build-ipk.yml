@@ -14,48 +14,63 @@ jobs:
         include:
           - arch: x86_64
             sdk_url: https://downloads.openwrt.org/releases/22.03.3/targets/x86/64/openwrt-sdk-22.03.3-x86-64_gcc-11.2.0_musl.Linux-x86_64.tar.xz
-          - arch: rk35xx
+          - arch: rk35xx        # arm64
             sdk_url: https://downloads.openwrt.org/releases/22.03.3/targets/rockchip/armv8/openwrt-sdk-22.03.3-rockchip-armv8_gcc-11.2.0_musl.Linux-x86_64.tar.xz
 
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: install deps
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential ccache ecj fastjar file g++ gawk \
-            gettext git libelf-dev libncurses5-dev libncursesw5-dev libssl-dev \
-            python3 python3-pip python3-venv python3-setuptools python3-dev \
-            rsync subversion swig time xsltproc zlib1g-dev wget
-      - name: download SDK
+          sudo apt-get install -y \
+            build-essential ccache ecj fastjar file g++ gawk \
+            gettext git libelf-dev libncurses5-dev libncursesw5-dev \
+            libssl-dev python3 python3-pip python3-venv python3-setuptools \
+            python3-dev rsync subversion swig time xsltproc zlib1g-dev wget
+
+      - name: 下载 & 解压 SDK（放到仓库外）
         run: |
           wget -q ${{ matrix.sdk_url }} -O /tmp/sdk.tar.xz
-          tar -xf /tmp/sdk.tar.xz -C /tmp && mv /tmp/openwrt-sdk* /tmp/sdk
-      - name: feeds
+          tar -xf /tmp/sdk.tar.xz -C /tmp
+          mv /tmp/openwrt-sdk* /tmp/sdk
+
+      - name: 准备 feeds（空即可）
         run: |
           cd /tmp/sdk
-          ./scripts/feeds update -a && ./scripts/feeds install -a
-      - name: copy source
+          touch feeds.conf
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 拷入插件源码
         run: |
           mkdir -p /tmp/sdk/package/utils
-          rsync -a --exclude=.git --exclude=.github "$GITHUB_WORKSPACE/" /tmp/sdk/package/utils/istore-captive/
-      - name: compile
+          cp -r "$GITHUB_WORKSPACE" /tmp/sdk/package/utils/istore-captive
+
+      - name: 配置 & 编译（单线程详细日志）
         run: |
           cd /tmp/sdk
           make defconfig
           echo "CONFIG_PACKAGE_istore-captive=m" >> .config
           make defconfig
-          make package/utils/istore-captive/compile -j$(nproc)
-      - name: collect
+          make package/utils/istore-captive/clean
+          make package/utils/istore-captive/compile -j1 V=s
+
+      - name: 收集产物
         run: |
           mkdir -p $GITHUB_WORKSPACE/artifacts
-          cp /tmp/sdk/bin/packages/*/base/istore-captive*.ipk $GITHUB_WORKSPACE/artifacts/istore-captive-${GITHUB_REF_NAME#v}-${{ matrix.arch }}.ipk
-      - name: release
-        if: startsWith(github.ref,'refs/tags/')
+          cp /tmp/sdk/bin/packages/*/base/istore-captive*.ipk \
+             $GITHUB_WORKSPACE/artifacts/istore-captive-${GITHUB_REF_NAME#v}-${{ matrix.arch }}.ipk
+
+      - name: 上传到 Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*.ipk
           token: ${{ secrets.GITHUB_TOKEN }}
           name: 兑换码上网插件 ${{ github.ref_name }}
           body: |
-            下载对应架构 `.ipk` → iStoreOS 后台「文件管理」上传安装即可。
+            根据架构下载对应 `.ipk` 文件，然后在 iStoreOS
+            **文件管理 → 上传 → 安装** 即可。

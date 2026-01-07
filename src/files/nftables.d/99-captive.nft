@@ -2,6 +2,13 @@ table inet cp {
   set cp_guest { type ipv4_addr; flags timeout; timeout 2h; }
   set cp_allow { type ipv4_addr; flags timeout; timeout 2h; }
 
+  chain input {
+    type filter hook input priority 0;
+    ip saddr @cp_allow counter accept
+    ip saddr @cp_guest tcp dport {80,443} counter accept
+    ip saddr @cp_guest counter drop
+  }
+
   chain forward {
     type filter hook forward priority 0;
     ip saddr @cp_allow counter accept
