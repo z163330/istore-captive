@@ -49,14 +49,15 @@ jobs:
           mkdir -p /tmp/sdk/package/utils
           cp -r "$GITHUB_WORKSPACE" /tmp/sdk/package/utils/istore-captive
 
-      - name: 配置 & 编译（单线程详细日志）
+      - name: 编译（单线程全日志）
         run: |
           cd /tmp/sdk
           make defconfig
           echo "CONFIG_PACKAGE_istore-captive=m" >> .config
           make defconfig
-          make package/utils/istore-captive/clean
-          make package/utils/istore-captive/compile -j1 V=s
+          # 重点：V=sc 把我们自己包的日志也打印
+          make package/utils/istore-captive/clean V=sc
+          make package/utils/istore-captive/compile -j1 V=sc
 
       - name: 收集产物
         run: |
